@@ -8,22 +8,27 @@ Function Get-AdExpUser {
         [int[]]$expireInXDays
     )
 
-    $today = Get-Date # -Hour 0 -Minute 0 -Second 0
+    # Start-Log -LogFile "$($env:windir)\temp\LazyExchangeAdmin.Get-AdExpUser.log"
+
+    $today = Get-Date
+
     $oldest = ($expireInXDays | Sort-Object)[-1]
-    $expiringAccounts = Search-ADAccount -UsersOnly -AccountExpiring -TimeSpan "$($oldest).00:00:00"
+    $expiringAccounts = Search-ADAccount -UsersOnly -AccountExpiring -TimeSpan "$($oldest).$($today.Hour):$($today.Minute):$($today.Second)"
 
     $finalResult = @()
     foreach ($account in $expiringAccounts) {
         $user = Get-AdUser $account -Properties EmailAddress, Manager, Name, SamAccountName
         
         # Get Manager's email if $NotifyWho includes Manager.
-        $managerEmail = ""            
-        try {
-            $managerEmail = (Get-AdUser ($user.Manager) -Properties EmailAddress).EmailAddress
-        }
-        catch {
-            $managerEmail = ""
-        }
+        $managerEmail = ""
+        if ($user.Manager) {
+            try {
+                $managerEmail = (Get-AdUser ($user.Manager) -Properties EmailAddress).EmailAddress
+            }
+            catch {
+                $managerEmail = ""
+            }
+        }        
         
         # Calculate days left before account expiration (round-off)
         [int]$daysLeftToExpire = [int](New-TimeSpan -Start $today -End ($account.AccountExpirationDate)).TotalDays
@@ -43,5 +48,6 @@ Function Get-AdExpUser {
             $finalResult += $tempObj
         }
     }
+    # Stop-Log
     return $finalResult
 }

@@ -6,7 +6,7 @@ Function Send-AdExpAlert {
         $InputObject,
 
         # Who to notify
-        [parameter(Mandatory)]
+        [parameter()]
         [ValidateNotNullOrEmpty()]
         [ValidateSet('User', 'Manager')]
         [string[]]$NotifyWho,
@@ -40,50 +40,69 @@ Function Send-AdExpAlert {
         [ValidateNotNullOrEmpty()]
         [pscredential]$Credential,
 
+        # Switch if SSL is required
         [parameter()]
         [switch]$UseSSL,
+
+        # Additional Recipients (CC)
+        [parameter()]
+        [ValidateNotNullOrEmpty()]
+        [mailaddress[]]$AdditionalRecipient,
+
+        # Custom HTML message to append to the original email
+        [parameter()]
+        [string]$CustomMessage
         # --------------------------------
         # End Mail Params
         # --------------------------------
-
-        [parameter()]
-        [string]$CustomMessageFile
     )
     begin {
-        #$PSBoundParameters
-        # Validate custom message
-        if ($CustomMessageFile) {
-            if (!(Test-Path -Path $CustomMessageFile)) {
-                Throw "The file $CustomMessageFile does not exist. Exiting script."
-            }
-            else {
-                $customMessage = Get-Content -Path $CustomMessageFile -Raw -Encoding UTF8
-            }
-        }
-
-        $html1 = @()
-        $html1 += '<html><head><title></title></head><body style="font-family:Tahoma">'
-
+        
     }
     process {
-        Write-Host ($InputObject.Name)
+        Write-Verbose "$($InputObject.Name), expires in $($InputObject.InDays) days"
+
+        $body = @()
+        $body += '<html><head><title></title></head><body style="font-family:Tahoma"><hr>'
+        $body += '<h3>User Details</h3>'
+        $body += '<p>'
+        $body += ('<b>Account Expiration Date:</b> <font color="red">' + ("{0:dddd, MMMM dd, yyyy hh:MM tt}" -f ($InputObject.Expiration)) + '</font><br>')
+        $body += ('<b>Name:</b> ' + ($InputObject.Name) + '<br>')
+        $body += ('<b>Login:</b> ' + ($InputObject.Login) + '<br>')
+        $body += ('<b>User Email:</b> ' + ($InputObject.Email) + '<br>')
+        $body += ('<b>Manager Email:</b> ' + ($InputObject.ManagerEmail) + '<br>')
+        $body += '</p><hr>'
         
-        $html2 = '<p>'
-        $html2 += ('Name: ' + ($InputObject.Name) + '<br>')
-        $html2 += ('Login: ' + ($InputObject.Login) + '<br>')
-        $html2 += ('User Email: ' + ($InputObject.Email) + '<br>')
-        $html2 += ('Account Expiration Date: ' + ("{0:dddd, MMMM dd, yyyy hh:MM tt}" -f ($InputObject.Expiration)) + '<br>')
-        $html2 += ('Manager Email: ' + ($InputObject.ManagerEmail) + '<br>')
-        $html2 += '</p>'
+        $body += '<h3>Notification</h3>'
+        $body += '<p>'
+    
+        # Is user notified?
+        if (($InputObject.Email) -and ($NotifyWho -contains 'User')) {
+            $body += ('<b>User:</b> Yes<br>')
+        }
+        else {
+            $body += ('<b>User:</b> No<br>')
+        }        
 
-        $body = $html1 + $html2
+        # Is manager notified?
+        if (($InputObject.ManagerEmail) -and ($NotifyWho -contains 'Manager')) {
+            $body += ('<b>Manager:</b> Yes<br>')
+        }
+        else {
+            $body += ('<b>Manager:</b> No<br>')
+        }
 
+        $body += ('<b>Admin:</b> Yes<br>')
+        $body += '</p><hr>'
+
+        # Append CustomMessage if present
         if ($customMessage) {
             $body += $customMessage
         }
-        $body += '</body></html>'
-        $body = $body -join "`n"        
 
+        $body += '</body></html>'
+
+        # Build email parameters
         $mailParams = @{
             Subject    = "Account [$($InputObject.Name)] will expire in $($InputObject.InDays) days"
             Body       = $body -join "`n"
@@ -93,6 +112,9 @@ Function Send-AdExpAlert {
             BodyAsHtml = $true        
         }
         
+        # --------------------------------     
+        # Start 'To' Recipients
+        # --------------------------------
         $To = @($AdminEmailAddress)
 
         # Add Manager Email as recipient
@@ -107,6 +129,19 @@ Function Send-AdExpAlert {
 
         # Add recipients to hash
         $mailParams += @{To = $To }
+        # --------------------------------     
+        # End 'To' Recipients
+        # --------------------------------
+
+        # --------------------------------     
+        # Start 'CC' Recipients
+        # --------------------------------
+        if ($AdditionalRecipient) {
+            $mailParams += @{cc = $AdditionalRecipient }
+        }
+        # --------------------------------
+        # End 'To' Recipients
+        # --------------------------------
         
         # If UseSSL is required
         if ($UseSSL) { $mailParams += @{UseSSL = $true } }
@@ -114,9 +149,14 @@ Function Send-AdExpAlert {
         # If Authenitcation is required
         if ($Credential) { $mailParams += @{Credential = $Credential } }
         
-        Send-MailMessage @mailParams -Verbose
+        try {
+            Send-MailMessage @mailParams -Verbose
+        }
+        catch {
+            Write-Host $_.Exception.Message
+        }        
     }
     end {
-
+        
     }
 }
