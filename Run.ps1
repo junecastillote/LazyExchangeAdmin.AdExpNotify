@@ -17,11 +17,11 @@ $props = @{
     SenderAddress = 'AdExpNotify@posh.lab'
     SmtpServer = 'smtp.posh.lab'
     Port = 25
-    #AdditionalRecipient = 'june@posh.lab'
+    AdditionalRecipient = 'ServiceDesk@posh.lab'
     CustomMessage = (Get-Content $PSScriptRoot\CustomMessage.HTML -Raw -Encoding UTF8 )
 }
 
-# Get expiring account in days (30,6,1,0), then send the 
+# Get expiring account in days (30,6,1,0), then send the notification
 Get-AdExpUser -expireInXDays 30,6,1,0 -Verbose | Send-AdExpAlert @props -Verbose
 
 # Stop transaction logging
